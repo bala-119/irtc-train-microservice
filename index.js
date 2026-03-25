@@ -1,0 +1,21 @@
+const express = require("express");
+const dotenv = require("dotenv");
+const connectDB = require("./app/config/dbConnect");
+
+dotenv.config();
+connectDB("irtc_DB");
+
+const app = express();
+app.use(express.json());
+
+//  Import router
+const router = require("./app/routes/routes");
+
+//  Use router properly
+app.use("/train", router);
+
+const PORT = process.env.PORT;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
