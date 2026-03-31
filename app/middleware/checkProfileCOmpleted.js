@@ -78,6 +78,7 @@ const checkProfileCompleted = async (req, res, next) => {
     }
 
     //  All good
+    console.log("moving to next(authMiddleware)....")
     next();
 
   } catch (error) {

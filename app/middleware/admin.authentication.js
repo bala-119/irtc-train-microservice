@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const authMiddleware = (requiredRole = null) => {
   return (req, res, next) => {
     try {
+      console.log("Entering authMiddleware in train")
       const authHeader = req.headers.authorization;
 
       //  Token check
@@ -28,7 +29,7 @@ const authMiddleware = (requiredRole = null) => {
           message: `${requiredRole} access only`
         });
       }
-
+      console.log("completing authMiddleware........")
       next();
 
     } catch (error) {

@@ -13,6 +13,9 @@ const router = require("./app/routes/routes");
 
 //  Use router properly
 app.use("/train", router);
+const stationRoutes = require("./app/routes/station.route");
+
+app.use("/stations", stationRoutes);
 
 const PORT = process.env.PORT;
 
