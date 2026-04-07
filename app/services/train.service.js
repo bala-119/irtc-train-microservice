@@ -1,5 +1,5 @@
 const Train = require("../models/train.model");
-const axios = require("axios");
+const Station = require("../models/station.model");
 
 // 🔥 Utility
 const getMinutes = (time) => {
@@ -11,488 +11,264 @@ const getMinutes = (time) => {
 class TrainService {
 
   // ✅ CREATE TRAIN
-  async createTrain(trainData) {
-    try {
-      const station_map = {};
-
-      trainData.route.forEach((station) => {
-        if (!station.station_code || station.stop_order === undefined) {
-          throw new Error("Each route must have station_code and stop_order");
-        }
-
-        if (station_map[station.station_code] !== undefined) {
-          throw new Error(`Duplicate station_code: ${station.station_code}`);
-        }
-
-        const arrival = getMinutes(station.arrival_time);
-        const departure = getMinutes(station.departure_time);
-
-        if (arrival !== null && departure !== null && arrival > departure) {
-          throw new Error(
-            `Arrival cannot be after departure at ${station.station_code}`
-          );
-        }
-
-        station_map[station.station_code] = station.stop_order;
-      });
-
-      trainData.station_map = station_map;
-      const train = await Train.create(trainData);
-      return train;
-
-    } catch (error) {
-      console.error("❌ Error in TrainService.createTrain:", error.message);
-      throw error;
-    }
+// Add this temporary debug code in your train.service.js createTrain method
+async createTrain(trainData) {
+  try {
+    console.log("1. Received train data:", JSON.stringify(trainData, null, 2));
+    
+    // Auto-set stop_order
+    trainData.route = trainData.route.map((station, index) => ({
+      ...station,
+      stop_order: index
+    }));
+    
+    console.log("2. After adding stop_order:", JSON.stringify(trainData.route, null, 2));
+    
+    // Create train instance
+    const train = new Train(trainData);
+    
+    console.log("3. Train instance created");
+    
+    // Save to database
+    const savedTrain = await train.save();
+    
+    console.log("4. Train saved successfully");
+    return savedTrain;
+    
+  } catch (error) {
+    console.error("Error details:");
+    console.error("Name:", error.name);
+    console.error("Message:", error.message);
+    console.error("Stack:", error.stack);
+    throw error;
   }
+}
 
   // ✅ GET TRAIN
   async getTrainByNumber(train_number) {
-    return await Train.findOne({ train_number: train_number.toUpperCase() });
+    try {
+      return await Train.findOne({ train_number: train_number.toUpperCase() });
+    } catch (error) {
+      console.error("Error getting train:", error);
+      throw error;
+    }
   }
 
   // ✅ GET ALL
   async getAllTrains() {
-    return await Train.find();
-  }
-
-  // ✅ BASIC SEARCH (USED BY SCHEDULE SERVICE)
-  async searchTrainsByFROMandTO(from, to) {
     try {
-      from = from.toUpperCase();
-      to = to.toUpperCase();
-
-      const trains = await Train.find({
-        [`station_map.${from}`]: { $exists: true },
-        [`station_map.${to}`]: { $exists: true }
-      });
-
-      const validTrains = trains.filter(train => {
-        const fromIndex = train.station_map[from];
-        const toIndex = train.station_map[to];
-        return fromIndex < toIndex;
-      });
-
-      return validTrains;
-
+      return await Train.find().sort({ train_number: 1 });
     } catch (error) {
+      console.error("Error getting all trains:", error);
       throw error;
     }
   }
 
-  // 🚀 ADVANCED SEARCH
-  // async searchTrains(from, to, date, sortBy, sortOn = "early", classType) {
-  //   try {
-  //     from = from.toUpperCase();
-  //     to = to.toUpperCase();
-
-  //     // Step 1: Find trains containing both stations
-  //     const trains = await Train.find({
-  //       [`station_map.${from}`]: { $exists: true },
-  //       [`station_map.${to}`]: { $exists: true }
-  //     });
-
-  //     // Step 2: Filter correct direction
-  //     let validTrains = trains.filter(train => {
-  //       const fromIndex = train.station_map[from];
-  //       const toIndex = train.station_map[to];
-  //       return fromIndex < toIndex;
-  //     });
-
-  //     if (!validTrains.length) return [];
-
-  //     // Step 3: Filter by classType
-  //     if (classType) {
-  //       classType = classType.toUpperCase();
-  //       validTrains = validTrains.filter(train =>
-  //         train.coaches.some(c => c.coach_type === classType)
-  //       );
-  //     }
-
-  //     if (!validTrains.length) return [];
-
-  //     // Step 4: Call Schedule Microservice
-  //     const scheduleRes = await axios.get(
-  //       "http://localhost:3004/v1/booking/schedule/search-trains",
-  //       { params: { from, to, date } }
-  //     );
-
-  //     let result = scheduleRes.data?.data || [];
-
-  //     // Step 5: Filter schedules using valid trains
-  //     const validTrainNumbers = new Set(validTrains.map(t => t.train_number));
-  //     result = result.filter(schedule =>
-  //       validTrainNumbers.has(schedule.train_number)
-  //     );
-
-  //     // Step 6: Merge Train Data
-  //     const trainMap = new Map();
-  //     validTrains.forEach(t => trainMap.set(t.train_number, t));
-
-  //     result = result.map(schedule => {
-  //       const train = trainMap.get(schedule.train_number);
-  //       return {
-  //         ...schedule,
-  //         class_pricing: train?.class_pricing || {}
-  //       };
-  //     });
-
-  //     // Step 7: Calculate Duration
-  //     result = result.map(r => {
-  //       const dep = getMinutes(r.departure_time);
-  //       const arr = getMinutes(r.arrival_time);
-  //       let duration = null;
-  //       if (dep !== null && arr !== null) {
-  //         duration = arr >= dep ? arr - dep : (24 * 60 - dep + arr);
-  //       }
-  //       return { ...r, duration };
-  //     });
-
-  //     // Step 8: Add Availability (placeholder)
-  //     result = result.map(r => ({
-  //       ...r,
-  //       availability: {
-  //         SL: "AVAILABLE",
-  //         "3AC": "WL 5"
-  //       }
-  //     }));
-
-  //     // Step 9: Sorting
-  //     if (sortBy) {
-  //       result.sort((a, b) => {
-  //         let valA, valB;
-  //         if (sortBy === "duration") {
-  //           valA = a.duration;
-  //           valB = b.duration;
-  //         } else if (sortBy === "departure") {
-  //           valA = getMinutes(a.departure_time);
-  //           valB = getMinutes(b.departure_time);
-  //         } else if (sortBy === "arrival") {
-  //           valA = getMinutes(a.arrival_time);
-  //           valB = getMinutes(b.arrival_time);
-  //         }
-  //         if (valA === null) return 1;
-  //         if (valB === null) return -1;
-  //         return sortOn === "late" ? valB - valA : valA - valB;
-  //       });
-  //     }
-
-  //     return result;
-
-  //   } catch (error) {
-  //     throw error;
-  //   }
-  // }
-
-// async searchTrains(from, to, date, sortBy, sortOn = "early", classType) {
-//   try {
-//     const normalize = (str) => str?.toUpperCase().trim();
-
-//     from = normalize(from);
-//     to = normalize(to);
-
-//     console.log("🔍 Search Params:", { from, to, date });
-
-//     // ✅ Step 1: Find trains
-//     const trains = await Train.find({
-//       [`station_map.${from}`]: { $exists: true },
-//       [`station_map.${to}`]: { $exists: true }
-//     });
-
-//     console.log("🚆 Total trains found:", trains.length);
-
-//     // ✅ Step 2: Direction filter
-//     let validTrains = trains.filter(train => {
-//       const stationMap = train.station_map;
-
-//       const fromIndex = stationMap?.get
-//         ? stationMap.get(from)
-//         : stationMap[from];
-
-//       const toIndex = stationMap?.get
-//         ? stationMap.get(to)
-//         : stationMap[to];
-
-//       console.log(`🚆 Train ${train.train_number}`);
-//       console.log("   FROM:", from, "->", fromIndex);
-//       console.log("   TO  :", to, "->", toIndex);
-
-//       if (fromIndex === undefined || toIndex === undefined) {
-//         return false;
-//       }
-
-//       return Number(fromIndex) < Number(toIndex);
-//     });
-
-//     console.log("➡️ After direction filter:", validTrains.length);
-
-//     if (!validTrains.length) return [];
-
-//     // ✅ Step 3: Class filter (optional)
-//     if (classType) {
-//       classType = normalize(classType);
-
-//       validTrains = validTrains.filter(train =>
-//         train.coaches?.some(c => normalize(c.coach_type) === classType)
-//       );
-
-//       console.log("🎟️ After class filter:", validTrains.length);
-//     }
-
-//     if (!validTrains.length) return [];
-
-//     // ✅ Helpers
-//     const getRouteData = (train, station) => {
-//       return train.route.find(r => r.station_code === station);
-//     };
-
-//     const getMinutes = (time) => {
-//       if (!time) return null;
-//       const [h, m] = time.split(":").map(Number);
-//       return h * 60 + m;
-//     };
-
-//     const getDuration = (train) => {
-//       const fromData = getRouteData(train, from);
-//       const toData = getRouteData(train, to);
-
-//       if (!fromData || !toData) return null;
-
-//       const dep = getMinutes(fromData.departure_time);
-//       const arr = getMinutes(toData.arrival_time);
-
-//       if (dep === null || arr === null) return null;
-
-//       return arr >= dep
-//         ? arr - dep
-//         : (1440 - dep + arr);
-//     };
-
-//     // ✅ Step 4: Build response (NO schedule)
-//     let result = validTrains.map(train => {
-//       return {
-//         train_id: train._id,
-//         train_number: train.train_number,
-//         train_name: train.train_name,
-//         from,
-//         to,
-//         departure_time: getRouteData(train, from)?.departure_time,
-//         arrival_time: getRouteData(train, to)?.arrival_time,
-//         duration: getDuration(train),
-//         classes: train.coaches?.map(c => c.coach_type) || [],
-//         class_pricing: train.class_pricing || {}
-//       };
-//     });
-
-//     // ✅ Step 5: Sorting
-//     if (sortBy) {
-//       result.sort((a, b) => {
-//         let valA, valB;
-
-//         if (sortBy === "duration") {
-//           valA = a.duration;
-//           valB = b.duration;
-//         } else if (sortBy === "departure") {
-//           valA = getMinutes(a.departure_time);
-//           valB = getMinutes(b.departure_time);
-//         } else if (sortBy === "arrival") {
-//           valA = getMinutes(a.arrival_time);
-//           valB = getMinutes(b.arrival_time);
-//         }
-
-//         if (valA === null) return 1;
-//         if (valB === null) return -1;
-
-//         return sortOn === "late"
-//           ? valB - valA
-//           : valA - valB;
-//       });
-//     }
-
-//     console.log("✅ Final result:", result.length);
-
-//     return result;
-
-//   } catch (error) {
-//     console.error("❌ ERROR:", error.message);
-//     throw error;
-//   }
-// }
-
-// services/trainService.js
-
-async searchTrains(from, to, date, sortBy, sortOn = "early", classType) {
-  try {
-    const normalize = (str) => str?.toLowerCase().trim();
-
-    console.log("🔍 Raw Input:", { from, to });
-
-    // ✅ Step 1: Load all trains (temporary approach)
-    const trains = await Train.find({});
-    if (!trains.length) return [];
-
-    // ✅ Step 2: Convert station name → code
-    const getStationCode = (stationName) => {
-      for (let train of trains) {
-        const found = train.route.find(
-          r => normalize(r.station_name) === normalize(stationName)
-        );
-        if (found) return found.station_code;
-      }
-      return null;
-    };
-
-    const fromCode = getStationCode(from);
-    const toCode = getStationCode(to);
-
-    if (!fromCode || !toCode) {
-      throw new Error("Invalid station name");
-    }
-
-    console.log("🔁 Converted:", from, "→", fromCode);
-    console.log("🔁 Converted:", to, "→", toCode);
-
-    from = fromCode;
-    to = toCode;
-
-    // ✅ Step 3: Filter trains
-    let validTrains = trains.filter(train => {
-      const stationMap = train.station_map;
-
-      const fromIdx = stationMap?.get
-        ? stationMap.get(from)
-        : stationMap[from];
-
-      const toIdx = stationMap?.get
-        ? stationMap.get(to)
-        : stationMap[to];
-
-      if (fromIdx === undefined || toIdx === undefined) return false;
-
-      return Number(fromIdx) < Number(toIdx);
-    });
-
-    console.log("➡️ After direction filter:", validTrains.length);
-
-    if (!validTrains.length) return [];
-
-    // ✅ Step 4: Class filter
-    if (classType) {
-      classType = classType.toUpperCase();
-
-      validTrains = validTrains.filter(train =>
-        train.coaches?.some(c => c.coach_type === classType)
-      );
-
-      console.log("🎟️ After class filter:", validTrains.length);
-    }
-
-    if (!validTrains.length) return [];
-
-    // ✅ Helpers
-    const getRouteData = (train, station) =>
-      train.route.find(r => r.station_code === station);
-
-    const getMinutes = (time) => {
-      if (!time) return null;
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
-    };
-
-    const getDuration = (train) => {
-      const fromData = getRouteData(train, from);
-      const toData = getRouteData(train, to);
-
-      if (!fromData || !toData) return null;
-
-      const dep = getMinutes(fromData.departure_time);
-      const arr = getMinutes(toData.arrival_time);
-
-      if (dep === null || arr === null) return null;
-
-      return arr >= dep
-        ? arr - dep
-        : (1440 - dep + arr);
-    };
-
-    // ✅ Step 5: Build response
-    let result = validTrains.map(train => ({
-      train_id: train._id,
-      train_number: train.train_number,
-      train_name: train.train_name,
-
-      // 🔥 Return BOTH name + code
-      from_code: from,
-      to_code: to,
-      from_name: getRouteData(train, from)?.station_name,
-      to_name: getRouteData(train, to)?.station_name,
-
-      departure_time: getRouteData(train, from)?.departure_time,
-      arrival_time: getRouteData(train, to)?.arrival_time,
-
-      duration: getDuration(train),
-
-      classes: train.coaches?.map(c => c.coach_type) || [],
-      class_pricing: train.class_pricing || {}
-    }));
-
-    // ✅ Step 6: Sorting
-    if (sortBy) {
-      result.sort((a, b) => {
-        let valA, valB;
-
-        if (sortBy === "duration") {
-          valA = a.duration;
-          valB = b.duration;
-        } else if (sortBy === "departure") {
-          valA = getMinutes(a.departure_time);
-          valB = getMinutes(b.departure_time);
-        } else if (sortBy === "arrival") {
-          valA = getMinutes(a.arrival_time);
-          valB = getMinutes(b.arrival_time);
-        }
-
-        if (valA === null) return 1;
-        if (valB === null) return -1;
-
-        return sortOn === "late"
-          ? valB - valA
-          : valA - valB;
+  // ✅ Convert station name to code
+  async getStationCode(stationName) {
+    try {
+      const station = await Station.findOne({ 
+        $or: [
+          { station_code: stationName.toUpperCase() },
+          { station_name: { $regex: new RegExp(`^${stationName}$`, 'i') } }
+        ]
       });
+      return station ? station.station_code : null;
+    } catch (error) {
+      console.error("Error getting station code:", error);
+      throw error;
     }
-
-    console.log("✅ Final result:", result.length);
-
-    return result;
-
-  } catch (error) {
-    console.error("❌ Service ERROR:", error.message);
-    throw error;
   }
-}
+
+  // ✅ BASIC SEARCH (by station names or codes)
+  async searchTrainsByFROMandTO(from, to, sortBy, sortOn = "early") {
+    try {
+      // Convert station names to codes
+      const fromCode = await this.getStationCode(from);
+      const toCode = await this.getStationCode(to);
+      
+      if (!fromCode) {
+        throw new Error(`Station "${from}" not found`);
+      }
+      if (!toCode) {
+        throw new Error(`Station "${to}" not found`);
+      }
+      
+      console.log(`Searching trains from ${fromCode} to ${toCode}`);
+      
+      // Find trains that have both stations
+      let trains = await Train.find({
+        [`station_map.${fromCode}`]: { $exists: true },
+        [`station_map.${toCode}`]: { $exists: true }
+      });
+      
+      // Filter by direction (from should come before to)
+      const validTrains = trains.filter(train => {
+        const fromIndex = train.station_map.get ? 
+          train.station_map.get(fromCode) : train.station_map[fromCode];
+        const toIndex = train.station_map.get ? 
+          train.station_map.get(toCode) : train.station_map[toCode];
+        
+        return fromIndex !== undefined && toIndex !== undefined && fromIndex < toIndex;
+      });
+      
+      console.log(`Found ${validTrains.length} valid trains`);
+      
+      // Build response
+      let result = validTrains.map(train => {
+        const routeData = train.route;
+        const fromData = routeData.find(r => r.station_code === fromCode);
+        const toData = routeData.find(r => r.station_code === toCode);
+        
+        const depTime = fromData?.departure_time;
+        const arrTime = toData?.arrival_time;
+        
+        let duration = null;
+        if (depTime && arrTime) {
+          const depMinutes = getMinutes(depTime);
+          const arrMinutes = getMinutes(arrTime);
+          if (depMinutes !== null && arrMinutes !== null) {
+            duration = arrMinutes >= depMinutes ? 
+              arrMinutes - depMinutes : 
+              (1440 - depMinutes + arrMinutes);
+          }
+        }
+        
+        return {
+          train_id: train._id,
+          train_number: train.train_number,
+          train_name: train.train_name,
+          from_code: fromCode,
+          to_code: toCode,
+          from_name: fromData?.station_name,
+          to_name: toData?.station_name,
+          departure_time: depTime,
+          arrival_time: arrTime,
+          duration: duration,
+          duration_hours: duration ? Math.floor(duration / 60) : null,
+          duration_minutes: duration ? duration % 60 : null,
+          classes: train.coaches.map(c => c.coach_type),
+          class_pricing: Object.fromEntries(train.class_pricing || new Map())
+        };
+      });
+      
+      // Sorting
+      if (sortBy) {
+        result.sort((a, b) => {
+          let valA, valB;
+          
+          if (sortBy === "duration") {
+            valA = a.duration;
+            valB = b.duration;
+          } else if (sortBy === "departure") {
+            valA = getMinutes(a.departure_time);
+            valB = getMinutes(b.departure_time);
+          } else if (sortBy === "arrival") {
+            valA = getMinutes(a.arrival_time);
+            valB = getMinutes(b.arrival_time);
+          } else {
+            return 0;
+          }
+          
+          if (valA === null) return 1;
+          if (valB === null) return -1;
+          
+          return sortOn === "late" ? valB - valA : valA - valB;
+        });
+      }
+      
+      return result;
+      
+    } catch (error) {
+      console.error("Error in searchTrainsByFROMandTO:", error);
+      throw error;
+    }
+  }
+  
+  // 🚀 ADVANCED SEARCH with date
+  async searchTrains(from, to, sortBy, sortOn = "early", classType) {
+    try {
+      // Validate date format
+      // if (!date || isNaN(new Date(date))) {
+      //   throw new Error("Invalid date format. Use YYYY-MM-DD");
+      // }
+      
+      // First get basic search results
+      let trains = await this.searchTrainsByFROMandTO(from, to, sortBy, sortOn);
+      
+      // Filter by class type if specified
+      if (classType && trains.length > 0) {
+        classType = classType.toUpperCase();
+        trains = trains.filter(train => 
+          train.classes.includes(classType)
+        );
+      }
+      
+      // Add date information and availability
+      trains = trains.map(train => ({
+        ...train,
+       
+        status: "AVAILABLE",
+        availability: train.classes.reduce((acc, className) => {
+          acc[className] = {
+            status: "AVAILABLE",
+            available_seats: 50
+          };
+          return acc;
+        }, {})
+      }));
+      
+      return trains;
+      
+    } catch (error) {
+      console.error("Error in searchTrains:", error);
+      throw error;
+    }
+  }
+  
   // ✅ UPDATE TRAIN
   async updateTrain(train_number, updateData) {
     try {
+      // If route is being updated, rebuild station_map
       if (updateData.route) {
-        const station_map = {};
-        updateData.route.forEach(station => {
-          station_map[station.station_code] = station.stop_order;
+        // Auto-set stop_order
+        updateData.route = updateData.route.map((station, index) => ({
+          ...station,
+          stop_order: index
+        }));
+        
+        const station_map = new Map();
+        updateData.route.forEach((station, index) => {
+          station_map.set(station.station_code, index);
         });
         updateData.station_map = station_map;
+        
+        // Update source and destination
+        updateData.source = updateData.route[0].station_code;
+        updateData.destination = updateData.route[updateData.route.length - 1].station_code;
       }
+      
       return await Train.findOneAndUpdate(
         { train_number: train_number.toUpperCase() },
         updateData,
-        { new: true }
+        { new: true, runValidators: true }
       );
     } catch (error) {
+      console.error("Error updating train:", error);
       throw error;
     }
   }
-
+  
   // ✅ DELETE TRAIN
   async deleteTrain(train_number) {
-    return await Train.findOneAndDelete({ train_number: train_number.toUpperCase() });
+    try {
+      return await Train.findOneAndDelete({ 
+        train_number: train_number.toUpperCase() 
+      });
+    } catch (error) {
+      console.error("Error deleting train:", error);
+      throw error;
+    }
   }
 }
 
