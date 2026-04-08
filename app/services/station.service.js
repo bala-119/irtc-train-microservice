@@ -17,32 +17,35 @@ class StationService {
     }
   }
 
-  // ✅ Bulk create stations
+  // ✅ Bulk create stations (Smart: Skips duplicates)
   async createStationsBulk(data) {
     try {
       if (!Array.isArray(data)) {
         throw new Error("Data must be an array of stations");
       }
 
-      if (data.length === 0) {
-        throw new Error("Data array cannot be empty");
+      const codes = data.map(s => s.station_code?.toUpperCase()).filter(Boolean);
+      
+      // Find which of these already exist
+      const existingStations = await Station.find({ 
+        station_code: { $in: codes } 
+      }, 'station_code');
+      
+      const existingCodes = new Set(existingStations.map(s => s.station_code));
+      
+      // Filter out existing ones
+      const newStationsData = data
+        .map(s => ({ ...s, station_code: s.station_code?.toUpperCase() }))
+        .filter(s => s.station_code && !existingCodes.has(s.station_code));
+
+      if (newStationsData.length === 0) {
+        return []; // Nothing new to add
       }
 
-      // Normalize all station codes to uppercase
-      const normalizedData = data.map(station => ({
-        ...station,
-        station_code: station.station_code?.toUpperCase()
-      }));
-
-      // Use insertMany for bulk operation
-      const stations = await Station.insertMany(normalizedData, { ordered: false });
-      return stations;
+      // Insert only the unique new stations
+      return await Station.insertMany(newStationsData, { ordered: false });
       
     } catch (error) {
-      // Handle duplicate key errors
-      if (error.code === 11000) {
-        throw new Error("One or more station codes already exist");
-      }
       throw error;
     }
   }

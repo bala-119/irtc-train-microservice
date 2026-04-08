@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors");
 const dotenv = require("dotenv");
 const connectDB = require("./app/config/dbConnect");
 
@@ -6,6 +7,7 @@ dotenv.config();
 connectDB("irtc_DB");
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 //  Import router

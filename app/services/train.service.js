@@ -204,18 +204,11 @@ async createTrain(trainData) {
         );
       }
       
-      // Add date information and availability
+      // Add date information (Availability is handled by Booking Service)
       trains = trains.map(train => ({
         ...train,
-       
         status: "AVAILABLE",
-        availability: train.classes.reduce((acc, className) => {
-          acc[className] = {
-            status: "AVAILABLE",
-            available_seats: 50
-          };
-          return acc;
-        }, {})
+        availability: {} // Empty, as Booking Service manages real-time counts
       }));
       
       return trains;
