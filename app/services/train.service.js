@@ -148,7 +148,9 @@ async createTrain(trainData) {
           duration_hours: duration ? Math.floor(duration / 60) : null,
           duration_minutes: duration ? duration % 60 : null,
           classes: train.coaches.map(c => c.coach_type),
-          class_pricing: Object.fromEntries(train.class_pricing || new Map())
+          class_pricing: Object.fromEntries(train.class_pricing || new Map()),
+          stop_gaps: (toData?.stop_order ?? 0) - (fromData?.stop_order ?? 0),
+          total_stops: train.route.length - 1
         };
       });
       
